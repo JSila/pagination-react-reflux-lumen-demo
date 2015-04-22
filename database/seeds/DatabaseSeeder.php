@@ -1,6 +1,7 @@
 <?php
 
 use App\Article;
+use App\Comment;
 
 use Faker\Factory as Faker;
 
@@ -17,9 +18,9 @@ class DatabaseSeeder extends Seeder {
 	public function run()
 	{
 		Model::unguard();
-		Article::truncate();
 
-		$this->call('ArticlesTableSeeder');
+        $this->call('ArticlesTableSeeder');
+		$this->call('CommentsTableSeeder');
 	}
 }
 
@@ -33,6 +34,24 @@ class ArticlesTableSeeder extends Seeder
             Article::create([
                 'title' => $faker->sentence(5),
                 'content' => $faker->paragraph(5)
+            ]);
+        }
+    }
+}
+
+class CommentsTableSeeder extends Seeder
+{
+    public function run()
+    {
+        $faker = Faker::create();
+
+        $articleIds = Article::all()->lists('id');
+
+        foreach (range(1, 200) as $index) {
+            Comment::create([
+                'name' => $faker->name,
+                'content' => $faker->paragraph(2),
+                'article_id' => $faker->randomElement($articleIds)
             ]);
         }
     }

@@ -1,7 +1,9 @@
-((React, Reflux, request) => {
+((React, Reflux, ReactRouter, request) => {
+
+    var {Route, RouteHandler, Link, State, HistoryLocation, DefaultRoute} = ReactRouter;
 
     var ArticlesActions = Reflux.createActions([
-        'getArticles'
+        'getArticles', 'getArticleComments'
     ]);
 
     var ArticlesStore = Reflux.createStore({
@@ -17,10 +19,28 @@
                         prev_page_url: data.prev_page_url
                     });
                 });
+        },
+        onGetArticleComments(url, articleId, pageNumber) {
+            request.get(url + '/'+ articleId +'/comments?page=' + pageNumber)
+                .success(data => {
+                    this.trigger({
+                        comments: data.data,
+                        current_page: data.current_page,
+                        last_page: data.last_page,
+                        next_page_url: data.next_page_url,
+                        prev_page_url: data.prev_page_url
+                    });
+                });
         }
     });
 
-    var App = React.createClass({
+    class App extends React.Component {
+        render() {
+            return <RouteHandler {...this.props} />;
+        }
+    }
+
+    var Index = React.createClass({
         mixins: [Reflux.connect(ArticlesStore)],
         getInitialState() {
             return {
@@ -38,7 +58,7 @@
             ArticlesActions.getArticles(this.props.url, pageNumber);
         },
         componentDidMount() {
-            this.getArticles(this.props.pageNumber);
+            this.getArticles(1);
         },
         render() {
             return (
@@ -49,36 +69,94 @@
                         totalPages={this.state.last_page}
                         nextPageUrl={this.state.next_page_url}
                         previousPageUrl={this.state.prev_page_url}
-                        getArticles={this.getArticles} />
+                        getData={this.getArticles} />
                     <ArticlesList articles={this.state.articles}/>
                 </div>
             );
         }
     });
 
-    var ArticlesList = React.createClass({
+    class ArticlesList extends React.Component {
         render() {
             return (
                 <div className="article-list">
                     {this.props.articles.map(article => <Article key={article.id} article={article} />)}
                 </div>
-            );
+            )
         }
-    });
+    }
 
-    var Article = React.createClass({
+    class CommentsList extends React.Component {
+        render() {
+            return (
+                <div className="comment-list">
+                    {this.props.comments.map(comment => <Comment key={comment.id} comment={comment} />)}
+                </div>
+            )
+        }
+    }
+
+    class Article extends React.Component{
         render() {
             var article = this.props.article;
             return (
                 <article>
-                    <h1 className="entry-title">{article.title}</h1>
-                    <div className="entry-content">{article.content}</div>
+                    <h1 className='entry-title'><Link to='single' params={article} article={article}>{article.title}</Link></h1>
+                    <div className='entry-content'>{article.content}</div>
                 </article>
+            )
+        }
+    }
+
+    class Comment extends React.Component{
+        render() {
+            var comment = this.props.comment;
+            return (
+                <article>
+                    <h1 className='comment-title'>{comment.name}</h1>
+                    <div className='comment-content'>{comment.content}</div>
+                </article>
+            )
+        }
+    }
+    var Single = React.createClass({
+        mixins: [Reflux.connect(ArticlesStore)],
+        getInitialState() {
+            return {
+                comments: [],
+                current_page: null,
+                last_page: null,
+                next_page_url: null,
+                prev_page_url: null
+            };
+        },
+        contextTypes: {
+            router: React.PropTypes.func
+        },
+        getArticleComments(pageNumber) {
+            ArticlesActions.getArticleComments(this.props.url, this.context.router.getCurrentParams().id, pageNumber);
+        },
+        componentDidMount() {
+            this.getArticleComments(1);
+        },
+        render() {
+            console.log(this.props);
+            return (
+                <div className="container">
+                    <Pagination
+                        baseUrl={this.props.url}
+                        currentPage={this.state.current_page}
+                        totalPages={this.state.last_page}
+                        nextPageUrl={this.state.next_page_url}
+                        previousPageUrl={this.state.prev_page_url}
+                        getData={this.getArticleComments} />
+                    <CommentsList comments={this.state.comments}/>
+                </div>
             );
         }
     });
 
-    var Pagination = React.createClass({
+    class Pagination extends React.Component {
         pages() {
             var pages = [];
             for(var i=1; i<=this.props.totalPages; i++) {
@@ -88,13 +166,15 @@
                 });
             }
             return pages;
-        },
+        }
+
         handlePageClick(pageNumber, e) {
             e.preventDefault();
             if (pageNumber > 0 && pageNumber <= this.props.totalPages) {
-                this.props.getArticles(pageNumber);
+                this.props.getData(pageNumber);
             }
-        },
+        }
+
         render() {
             var firstItemClass = this.props.currentPage == 1 ? 'disabled' : '';
             var firstItemUrl = this.props.previousPageUrl ? this.props.previousPageUrl : '';
@@ -139,8 +219,17 @@
                 </nav>
             );
         }
+    };
+
+    var routes = (
+        <Route handler={App}>
+            <DefaultRoute name="index" handler={Index}/>
+            <Route name='single' path='/:id' handler={Single} />
+        </Route>
+    )
+
+    ReactRouter.run(routes, HistoryLocation, (Handler, state) => {
+        React.render(<Handler url='/articles' />, document.body);
     });
 
-    React.render(<App url="/articles" />, document.body);
-
-})(window.React, window.Reflux, window.atomic);
+})(window.React, window.Reflux, window.ReactRouter, window.atomic);
